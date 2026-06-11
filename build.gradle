@@ -1,0 +1,154 @@
+plugins {
+    id "org.jetbrains.kotlin.jvm" version "1.9.24"
+    id 'com.github.johnrengelman.shadow' version '8.1.1'
+}
+
+apply plugin: 'java'
+apply plugin: 'kotlin'
+
+//Defines what version of Java to use.
+sourceCompatibility = 1.8
+
+//Defines how Kotlin should compile.
+compileKotlin {
+    sourceCompatibility = JavaVersion.VERSION_1_8
+    targetCompatibility = JavaVersion.VERSION_1_8
+
+    kotlinOptions {
+        //Defines what jvm bytecode to use, 1.8 rather than 1.6
+        jvmTarget = "1.8"
+        apiVersion = "1.8"
+        languageVersion = "1.8"
+    }
+}
+
+//Defines how Kotlin should compile when testingTry to keep it the same as compileKotlin.
+compileTestKotlin {
+    sourceCompatibility = JavaVersion.VERSION_1_8
+    targetCompatibility = JavaVersion.VERSION_1_8
+
+    kotlinOptions {
+        //Defines what jvm bytecode to use, 1.8 rather than 1.6
+        jvmTarget = "1.8"
+        apiVersion = "1.8"
+        languageVersion = "1.8"
+    }
+}
+
+repositories {
+    mavenLocal()
+    mavenCentral()
+    maven { url "https://s3-eu-west-1.amazonaws.com/furhat-maven/releases"}
+    maven { url 'https://repo.gradle.org/gradle/libs-releases' }
+}
+
+dependencies {
+    implementation 'com.furhatrobotics.furhatos:furhat-commons:2.9.0'
+    implementation "com.squareup.okhttp3:okhttp:4.10.0"
+    implementation "org.json:json:20180130"
+    implementation "io.github.cdimascio:dotenv-kotlin:6.4.1"
+}
+
+jar {
+    def lowerCasedName = archiveBaseName.get().toLowerCase()
+    def normalizedName = lowerCasedName.substring(0,1).toUpperCase() + lowerCasedName.substring(1)
+    manifest {
+        attributes(
+                'Class-Path': configurations.compileClasspath.collect { it.getName() }.join(' '),
+                'Main-Class': "furhatos.app.${lowerCasedName}.${normalizedName}Skill"
+        )
+    }
+}
+
+// Ordner, in den die Stammzertifikate geladen werden (im build-Ordner,
+// damit nichts ins Projekt-Quellverzeichnis geschrieben wird).
+def caCertsDir = new File(project.buildDir, "ca-certs")
+
+// Laedt die Let's-Encrypt-Stammzertifikate herunter. Diese werden in die
+// Skill gepackt, damit die HTTPS-Verbindung zur KI auch auf einem Roboter
+// funktioniert, dessen Java die neueren Zertifikate noch nicht kennt
+// (Fehler "PKIX path building failed"). Der Download laeuft auf IHREM
+// Rechner (der die Zertifikate kennt), nicht auf dem Roboter.
+task downloadCaCerts {
+    description "Laedt einen aktuellen Standard-Zertifikatssatz (Mozilla/curl) fuer die Skill herunter."
+    doLast {
+        caCertsDir.mkdirs()
+        // Vollstaendiger, aktueller Satz vertrauenswuerdiger Stammzertifikate
+        // (derselbe, den curl/Mozilla verwenden). Deckt Let's Encrypt UND alle
+        // anderen gaengigen Aussteller ab, damit wir nicht raten muessen,
+        // welche CA der KI-Server nutzt.
+        def sources = [
+            "https://curl.se/ca/cacert.pem",
+            "https://raw.githubusercontent.com/bagder/ca-bundle/master/ca-bundle.crt"
+        ]
+        def target = new File(caCertsDir, "cacert.pem")
+        def ok = false
+        for (url in sources) {
+            try {
+                new URL(url).openStream().withCloseable { input ->
+                    target.withOutputStream { out -> out << input }
+                }
+                if (target.length() > 0) {
+                    println "[downloadCaCerts] geladen: cacert.pem (${target.length()} Bytes) von ${url}"
+                    ok = true
+                    break
+                }
+            } catch (Exception e) {
+                println "[downloadCaCerts] ${url} nicht erreichbar (${e.message})."
+            }
+        }
+        if (!ok) {
+            if (target.exists() && target.length() > 0) {
+                println "[downloadCaCerts] Download fehlgeschlagen, nutze vorhandene cacert.pem."
+            } else {
+                println "[downloadCaCerts] WARNUNG: Zertifikatssatz konnte nicht geladen werden. Internetverbindung pruefen und neu bauen."
+            }
+        }
+
+        // Optional: ein selbst hinterlegtes Zertifikat (z.B. das Stammzertifikat
+        // eines Uni-/Firmen-Proxys, der HTTPS aufbricht). Liegt im Projektordner
+        // eine Datei "extra-cert.pem", wird sie mit eingepackt.
+        def extra = project.file("extra-cert.pem")
+        if (extra.exists()) {
+            new File(caCertsDir, "extra.pem").bytes = extra.bytes
+            println "[downloadCaCerts] Eigenes Zertifikat 'extra-cert.pem' eingepackt."
+        }
+    }
+}
+
+//ShadowJar depends on jar being finished properly.
+shadowJar {
+    dependsOn downloadCaCerts
+
+    exclude '**/Log4j2Plugins.dat'
+    exclude '**/node_modules'
+
+    from("skill.properties")
+
+    // Die Stammzertifikate (siehe downloadCaCerts) unter "certs/" einpacken.
+    from(caCertsDir) { into 'certs' }
+
+    // Die ".env" mit dem API-Schluessel in die Skill-Datei packen, damit der
+    // Key auch auf dem echten Roboter ankommt (dort gibt es kein Dateisystem-
+    // ".env"). Wird nur eingepackt, wenn die Datei existiert. Die ".env" bleibt
+    // weiterhin durch ".gitignore" vom Hochladen zu GitHub ausgeschlossen.
+    if (project.file('.env').exists()) {
+        from('.env')
+    }
+
+    // Load skill.properties to set name/version dynamically
+    def properties = new Properties()
+    properties.load(project.file('skill.properties').newDataInputStream())
+    def version = properties.getProperty('version')
+    def name = properties.getProperty('name')
+
+    archiveBaseName.set(name)
+    archiveVersion.set(version)
+    archiveExtension.set("skill")
+
+    manifest {
+        attributes(
+            'Main-Class': "furhatos.app.${project.name.toLowerCase()}.${project.name.capitalize()}Skill"
+        )
+    }
+}
