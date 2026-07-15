@@ -237,6 +237,54 @@ Das hängt von der Einstellung `START_BEHAVIOR` ab (Teil 3, Datei 1):
 
 ---
 
+## Teil 6: Betriebsmodi und Weboberfläche (Steuerpult)
+
+Es gibt zwei Betriebsmodi. Sie stellen ihn ganz oben in `Einstellungen.kt` ein:
+
+```kotlin
+val BETRIEBS_MODUS = Betriebsmodus.STUDIE   // oder Betriebsmodus.MESSE
+```
+
+| | **Studie** | **Messe** |
+|---|---|---|
+| Start | manuell bzw. wie `START_BEHAVIOR` | automatisch, sobald eine Person erkannt wird |
+| Einleitung | KI erzeugt den ersten Satz | **fester** Einleitungssatz (umschaltbar auf KI) |
+| Schluss | KI erzeugt den Schluss | KI-Schluss (umschaltbar auf festen Satz) |
+| Timer | **an** (12 Min, gleiche Dauer für alle) | **aus** (Betreuung beendet per Knopf) |
+| Nach dem Ende | Programm endet | bereit für die nächste Person (ohne Neustart) |
+
+Der **Studien-Modus** verhält sich wie das ursprüngliche Programm und ist bewusst standardisiert (gleiche Einleitung/Schluss und feste Dauer für alle Teilnehmenden). Der **Messe-Modus** ist flexibler, läuft eher autonom und wird über die Weboberfläche gesteuert.
+
+### Die Weboberfläche (Steuerpult)
+
+Sobald der Roboter läuft, öffnen Sie im Browser:
+
+- virtueller Furhat: `http://localhost:8088/`
+- physischer Roboter: `http://<roboter-ip>:8088/`
+
+Die Seite ist für Handy/Tablet gemacht. Sie hat:
+
+- **Start / Neues Gespräch** – beginnt ein Gespräch (bzw. startet für die nächste Person). Während ein Gespräch läuft, ist dieser Knopf ausgegraut; beenden Sie erst das laufende Gespräch, um ein neues zu starten.
+- **Pause** und **Weiter** – hält das Gespräch mitten im Verlauf an und setzt es genau dort fort (z. B. wenn jemand eine Frage an die Betreuung hat). Der Timer pausiert mit; beim Fortsetzen sagt der Roboter einen kurzen Überbrückungssatz.
+- **Beenden** – der Roboter sagt den Schlusssatz und ist danach bereit für die nächste Person
+- Schalter **Timer an/aus**, **Einleitung fest/KI**, **Schluss fest/KI** – jederzeit live umschaltbar
+- Statusanzeige (bereit / läuft / pausiert) und verbleibende Zeit
+
+Diese Umschaltungen gelten nur für die laufende Sitzung; die Startwerte kommen aus dem Betriebsmodus bzw. aus `Einstellungen.kt`. Die alte Adresse `http://localhost:8088/start` funktioniert weiterhin und startet ein Gespräch.
+
+> **Sicherheit:** Die Weboberfläche ist für jeden im selben Netzwerk erreichbar (ohne Passwort). Für eine Messe mit eigenem Router ist das in der Regel unproblematisch.
+
+### Neue feste Sätze in `Einstellungen.kt`
+
+Im Abschnitt „Feste Sätze" können Sie anpassen:
+
+- `EINLEITUNGSSATZ` – fester Einleitungssatz (Messe bzw. wenn Einleitung auf „fest" steht)
+- `SCHLUSSSATZ` – fester Schlusssatz (beim Beenden bzw. wenn Schluss auf „fest" steht)
+- `UEBERBRUECKUNGSSATZ` – kurzer Satz nach einer Pause
+- `GREETING_TEXT` – Wartesatz (nur Studie mit `BEGRUESSUNG_DANN_START`)
+
+---
+
 ## Wenn etwas nicht funktioniert
 
 **Der Gradle-Sync (Teil 2) bleibt hängen oder bricht ab.**
