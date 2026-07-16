@@ -15,6 +15,8 @@
 
 package furhatos.app.furhat.flow.main
 
+import furhatos.app.furhat.setting.BETRIEBS_MODUS
+import furhatos.app.furhat.setting.Betriebsmodus
 import furhatos.app.furhat.setting.GREETING_TEXT
 import furhatos.app.furhat.setting.START_BEHAVIOR
 import furhatos.app.furhat.setting.StartBehavior
@@ -26,17 +28,21 @@ object StudyFlags {
 
 val Waiting = state {
     onEntry {
-        when (START_BEHAVIOR) {
-            StartBehavior.DIREKT -> {
-                goto(Conversation)
-            }
-            StartBehavior.BEGRUESSUNG_DANN_START -> {
-                if (!StudyFlags.greetingShown) {
-                    StudyFlags.greetingShown = true
-                    furhat.say(GREETING_TEXT)
+        when (BETRIEBS_MODUS) {
+            // MESSE: automatisch starten, sobald eine Person da ist.
+            Betriebsmodus.MESSE -> goto(Conversation)
+
+            // STUDIE: wie bisher, je nach Startverhalten.
+            Betriebsmodus.STUDIE -> when (START_BEHAVIOR) {
+                StartBehavior.DIREKT -> goto(Conversation)
+                StartBehavior.BEGRUESSUNG_DANN_START -> {
+                    if (!StudyFlags.greetingShown) {
+                        StudyFlags.greetingShown = true
+                        furhat.say(GREETING_TEXT)
+                    }
+                    // Warten auf den Start (Knopf in der Weboberflaeche bzw.
+                    // Adresse /start), siehe onEvent unten.
                 }
-                // Warten auf den Start-Trigger (Browser-Adresse /start),
-                // siehe onEvent unten.
             }
         }
     }
@@ -52,7 +58,8 @@ val Waiting = state {
         }
     }
 
-    onEvent("START_STUDY_DIALOGUE") {
+    // Start-Knopf der Weboberflaeche (bzw. Adresse /start).
+    onEvent("STEUER_START") {
         StudyFlags.greetingShown = false
         goto(Conversation)
     }

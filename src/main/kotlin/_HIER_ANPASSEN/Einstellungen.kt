@@ -7,9 +7,11 @@ package furhatos.app.furhat.setting
  *
  *  Das ist eine der beiden Dateien, die angepasst werden können.
  *  Hier wird eingestellt:
-// *  1. Welche KI verwendet wird (Uni-KI oder OpenAI)
+ *    0. Betriebsmodus: STUDIE oder MESSE
+ *    1. Welche KI verwendet wird (Uni-KI oder OpenAI)
  *    2. Wie das Gespräch startet (sofort oder erst nach einem Klick im Browser)
  *    3. Wie lange ein Gespräch maximal dauern darf
+ *    4. Feste Sätze (Einleitung, Schluss, Pause-Überbrückung, Wartesatz)
  *
  *  Es müssen nur die mit "HIER EINSTELLEN" markierten Zeilen geändert werden.
  *
@@ -17,6 +19,41 @@ package furhatos.app.furhat.setting
  *  (im Gradle-Fenster: Tasks -> shadow -> shadowJar). Siehe README.
  * ═══════════════════════════════════════════════════════════════════════════
  */
+
+
+// ───────────────────────────────────────────────────────────────────────────
+//  0. BETRIEBSMODUS
+// ───────────────────────────────────────────────────────────────────────────
+
+/**
+ * Zwei Betriebsmodi:
+ *
+ *  - STUDIE: Verhält sich wie das ursprüngliche Programm. Standardisiert für
+ *            die wissenschaftliche Untersuchung: Start über START_BEHAVIOR,
+ *            Einleitung und Schluss erzeugt die KI, der Timer ist an.
+ *
+ *  - MESSE:  Für Öffentlichkeitsarbeit. Wird über die Weboberfläche gesteuert
+ *            (http://<roboter-ip>:8088/). Start automatisch bei Personen-
+ *            erkennung, fester Einleitungssatz (umschaltbar), KI-Schluss
+ *            (umschaltbar), Timer standardmäßig aus. Pause/Weiter/Beenden per
+ *            Knopf; nach dem Ende ist der Roboter sofort bereit für die
+ *            nächste Person.
+ *
+ * Die Voreinstellungen je Modus (Einleitung/Schluss fest oder KI, Timer an/aus)
+ * lassen sich in der Weboberfläche jederzeit live umschalten.
+ */
+enum class Betriebsmodus {
+    STUDIE,
+    MESSE
+}
+
+/**
+ * HIER EINSTELLEN: Betriebsmodus.
+ *     val BETRIEBS_MODUS = Betriebsmodus.STUDIE
+ * oder
+ *     val BETRIEBS_MODUS = Betriebsmodus.MESSE
+ */
+val BETRIEBS_MODUS = Betriebsmodus.STUDIE
 
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -50,11 +87,11 @@ val LLM_PROVIDER = LLMProviderType.UNI
 
 
 // ───────────────────────────────────────────────────────────────────────────
-//  2. WIE STARTET DAS GESPRÄCH?
+//  2. WIE STARTET DAS GESPRÄCH?  (nur Modus STUDIE)
 // ───────────────────────────────────────────────────────────────────────────
 
 /**
- * Mögliches Startverhalten:
+ * Mögliches Startverhalten im Modus STUDIE:
  *
  *  - DIREKT:
  *      Das Gespräch beginnt sofort. Der Roboter sagt direkt seinen ersten
@@ -66,6 +103,10 @@ val LLM_PROVIDER = LLMProviderType.UNI
  *      die Start-Adresse aufgerufen wird:
  *          http://localhost:8088/start        (virtueller Furhat)
  *          http://<roboter-ip>:8088/start     (physischer Roboter)
+ *
+ * Im Modus MESSE wird diese Einstellung ignoriert: Dort startet das Gespräch
+ * automatisch, sobald eine Person erkannt wird (bzw. über den Start-Knopf der
+ * Weboberfläche).
  */
 enum class StartBehavior {
     DIREKT,
@@ -73,7 +114,7 @@ enum class StartBehavior {
 }
 
 /**
- * HIER EINSTELLEN: Startverhalten.
+ * HIER EINSTELLEN: Startverhalten (nur Modus STUDIE).
  *
  * Sofort starten:
  *     val START_BEHAVIOR = StartBehavior.DIREKT
@@ -83,22 +124,18 @@ enum class StartBehavior {
  */
 val START_BEHAVIOR = StartBehavior.DIREKT
 
-/**
- * Wartesatz, der nur im Modus BEGRUESSUNG_DANN_START gesagt wird,
- * bevor das eigentliche Gespräch über die Browser-Adresse gestartet wird.
- */
-const val GREETING_TEXT =
-    "Hi! Ich lade kurz das Gespräch, das dauert einen kleinen Moment. Setz dich gern schon mal hin."
-
 
 // ───────────────────────────────────────────────────────────────────────────
-//  3. GESPRÄCHSDAUER
+//  3. GESPRÄCHSDAUER (Timer)
 // ───────────────────────────────────────────────────────────────────────────
 
 /**
  * HIER EINSTELLEN: Maximale Gesprächsdauer in MINUTEN.
  * Nach dieser Zeit verabschiedet sich der Roboter und beendet das Gespräch.
  * Standard: 12 Minuten.
+ *
+ * Ob der Timer überhaupt aktiv ist, hängt vom Betriebsmodus ab (STUDIE: an,
+ * MESSE: aus) und lässt sich in der Weboberfläche live umschalten.
  */
 const val CONVERSATION_TIME_LIMIT_MINUTES = 12
 
@@ -107,12 +144,55 @@ const val CONVERSATION_TIME_LIMIT_MS = CONVERSATION_TIME_LIMIT_MINUTES * 60 * 10
 
 
 // ───────────────────────────────────────────────────────────────────────────
-//  4. ERWEITERTE EINSTELLUNGEN (normalerweise unverändert lassen)
+//  4. FESTE SÄTZE
 // ───────────────────────────────────────────────────────────────────────────
 
 /**
- * Port für die Start-Adresse (Browser-Trigger im Modus
- * BEGRUESSUNG_DANN_START). Standard: 8088.
+ * Auswahl, ob ein Satz fest vorgegeben oder von der KI erzeugt wird.
+ * Wird für Einleitung und Schluss genutzt.
+ */
+enum class SatzModus {
+    FEST,   // der unten hinterlegte feste Satz
+    KI      // die KI erzeugt den Satz (__START__ bzw. __END__)
+}
+
+/**
+ * HIER EINSTELLEN: Fester Einleitungssatz.
+ * Wird gesprochen, wenn die Einleitung auf "fest" steht (z. B. im Messe-Modus).
+ */
+const val EINLEITUNGSSATZ =
+    "Hallo! Schön, dass du da bist. Ich bin Furhat. Erzähl doch mal: Was führt dich heute her?"
+
+/**
+ * HIER EINSTELLEN: Fester Schlusssatz.
+ * Wird gesprochen, wenn der Schluss auf "fest" steht oder beim Beenden per Knopf.
+ */
+const val SCHLUSSSATZ =
+    "Das war ein schönes Gespräch. Vielen Dank und bis bald!"
+
+/**
+ * HIER EINSTELLEN: Überbrückungssatz nach einer Pause.
+ * Wird gesprochen, wenn das Gespräch über die Weboberfläche fortgesetzt wird.
+ */
+const val UEBERBRUECKUNGSSATZ =
+    "So, wo waren wir? Erzähl gern weiter."
+
+/**
+ * Wartesatz, der nur im Modus STUDIE mit START_BEHAVIOR =
+ * BEGRUESSUNG_DANN_START gesagt wird, bevor das eigentliche Gespräch über die
+ * Browser-Adresse gestartet wird.
+ */
+const val GREETING_TEXT =
+    "Hi! Ich lade kurz das Gespräch, das dauert einen kleinen Moment. Setz dich gern schon mal hin."
+
+
+// ───────────────────────────────────────────────────────────────────────────
+//  5. ERWEITERTE EINSTELLUNGEN (normalerweise unverändert lassen)
+// ───────────────────────────────────────────────────────────────────────────
+
+/**
+ * Port für die Weboberfläche / Start-Adresse. Standard: 8088.
+ * Aufruf: http://localhost:8088/ (virtuell) bzw. http://<roboter-ip>:8088/.
  */
 const val START_TRIGGER_PORT = 8088
 

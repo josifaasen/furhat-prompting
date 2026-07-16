@@ -20,15 +20,14 @@ import furhatos.app.furhat.setting.LLM_PROVIDER
 import furhatos.app.furhat.setting.LLMProviderType
 import furhatos.app.furhat.setting.MAX_NUMBER_OF_USERS
 import furhatos.app.furhat.setting.START_TRIGGER_PORT
+import furhatos.app.furhat.steuerung.Steuerung
+import furhatos.app.furhat.steuerung.starteSteuerpult
 import furhatos.app.furhat.util.EnvConfig
 import furhatos.flow.kotlin.State
 import furhatos.flow.kotlin.furhat
 import furhatos.flow.kotlin.state
 import furhatos.flow.kotlin.users
 import furhatos.util.Language
-import com.sun.net.httpserver.HttpServer
-import java.net.InetSocketAddress
-import java.util.concurrent.Executors
 
 val Init: State = state {
     init {
@@ -47,21 +46,19 @@ val Init: State = state {
             )
         }
 
+        // Voreinstellungen passend zum Betriebsmodus (STUDIE/MESSE) setzen.
+        Steuerung.initFromMode()
+
         // Wann nimmt Furhat eine Person als Gespraechspartner wahr?
         users.setSimpleEngagementPolicy(DISTANCE_TO_ENGAGE, MAX_NUMBER_OF_USERS)
 
-        // Manueller Start-Trigger per HTTP:
-        // GET http://localhost:<PORT>/start  (virtueller Furhat)
-        // GET http://<roboter-ip>:<PORT>/start  (physischer Furhat)
-        val server = HttpServer.create(InetSocketAddress(START_TRIGGER_PORT), 0)
-        server.createContext("/start") { exchange ->
-            send("START_STUDY_DIALOGUE")
-            val body = "OK"
-            exchange.sendResponseHeaders(200, body.toByteArray().size.toLong())
-            exchange.responseBody.use { it.write(body.toByteArray()) }
-        }
-        server.executor = Executors.newSingleThreadExecutor()
-        server.start()
+        // Weboberflaeche / Steuerpult starten:
+        //   http://localhost:<PORT>/        (virtueller Furhat)
+        //   http://<roboter-ip>:<PORT>/     (physischer Furhat)
+        // Die alte Adresse /start funktioniert weiterhin (startet das Gespraech).
+        // Der send-Callback wird hier im Flow-Kontext erzeugt (send ist hier
+        // verfuegbar) und ist threadsicher aus den HTTP-Handlern aufrufbar.
+        starteSteuerpult({ eventName -> send(eventName) }, START_TRIGGER_PORT)
     }
 
     onEntry {
